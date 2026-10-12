@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ប្រព័ន្ធសុំច្បាប់ក្លឹបសិល្បៈ</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Kantumruy Pro', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full px-4 pointer-events-none"></div>
+
+    <!-- Main Wrapper -->
+    <div id="app" class="flex-grow flex flex-col">
+        <!-- Will be rendered via JS -->
+    </div>
+
+    <script>
+        // Predefined users database
+        const usersDB = [
+            { username: 'teacher', password: '123', name: 'លោកគ្រូ សុខ ចាន់ថា', role: 'TEACHER', title: 'គ្រូដឹកនាំក្លឹប', avatar: 'https://placehold.co/100x100/4f46e5/ffffff?text=គ្រូ' },
+            { username: 'leader', password: '123', name: 'សុខា', role: 'LEADER', title: 'ប្រធានក្លឹប', avatar: 'https://placehold.co/100x100/10b981/ffffff?text=ប្រធាន' },
+            { username: 'Vice1', password: '123', name: 'នារី', role: 'VICE', title: 'អនុប្រធានក្លឹប', avatar: 'https://placehold.co/100x100/f59e0b/ffffff?text=នារី' },
+            { username: 'Vice2', password: '123', name: 'សុណា', role: 'VICE', title: 'អនុប្រធានក្លឹប', avatar: 'https://placehold.co/100x100/ec4899/ffffff?text=សុណា' },
+            { username: 'student', password: '123', name: 'ចាន់ រ៉ា (សិស្ស)', role: 'STUDENT', title: 'សមាជិកក្លឹប', avatar: 'https://placehold.co/100x100/3b82f6/ffffff?text=សិស្ស' }
+        ];
+
+        // Initial Mock Leaves if empty
+        const initialLeaves = [
+            { id: 1, studentName: 'កែវ ពិសិដ្ឋ', studentClass: 'ថ្នាក់ទី ១២ ក', reason: 'មានធុរៈផ្ទាល់ខ្លួន និងទៅមន្ទីរពេទ្យជាមួយម្ដាយ។', startDate: '2026-06-10', endDate: '2026-06-11', status: 'PENDING', createdAt: new Date(Date.now() - 3600000).toISOString() },
+            { id: 2, studentName: 'សេង ម៉ាលី', studentClass: 'ថ្នាក់ទី ១១ ខ', reason: 'ចូលរួមបុណ្យខួបកំណើតជីដូននៅខេត្ត។', startDate: '2026-06-12', endDate: '2026-06-12', status: 'APPROVED', createdAt: new Date(Date.now() - 86400000).toISOString() }
+        ];
+
+        // App State
+        let currentUser = JSON.parse(localStorage.getItem('art_club_current_user')) || null;
+        let leaves = JSON.parse(localStorage.getItem('art_club_leaves')) || initialLeaves;
+
+        // Sound notification simulator using Web Audio API
+        function playNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } catch(e) {
+                console.log("Audio not supported or blocked");
+            }
+        }
+
+        // Show toast notification
+        function showNotification(title, message, type = 'info') {
+            playNotificationSound();
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgBorder = 'border-l-4 border-indigo-500 bg-white';
+            let icon = '<i class="fa-solid fa-bell text-indigo-500 text-xl"></i>';
+            if (type === 'success') {
+                bgBorder = 'border-l-4 border-emerald-500 bg-white';
+                icon = '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>';
+            } else if (type === 'alert') {
+                bgBorder = 'border-l-4 border-amber-500 bg-white animate-bounce';
+                icon = '<i class="fa-solid fa-envelope-open-text text-amber-500 text-xl"></i>';
+            }
+
+            toast.className = `pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-xl ${bgBorder} text-slate-700 transition-all duration-300 transform translate-y-2 opacity-0`;
+            toast.innerHTML = `
+                <div class="flex-shrink-0 mt-0.5">${icon}</div>
+                <div class="flex-grow">
+                    <h5 class="font-bold text-sm text-slate-900">${title}</h5>
+                    <p class="text-xs text-slate-600 mt-0.5">${message}</p>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 text-sm"><i class="fa-solid fa-xmark"></i></button>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        // Render main app based on login state
+        function render() {
+            const app = document.getElementById('app');
+            if (!currentUser) {
+                app.innerHTML = renderLoginScreen();
+            } else {
+                if (currentUser.role === 'STUDENT') {
+                    app.innerHTML = renderStudentDashboard();
+                } else {
+                    app.innerHTML = renderAdminDashboard();
+                }
+            }
+        }
+
+        function renderLoginScreen() {
+            return `
+                <div class="flex-grow flex items-center justify-center p-4">
+                    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                        <div class="bg-gradient-to-tr from-indigo-600 to-violet-600 p-8 text-white text-center relative overflow-hidden">
+                            <div class="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+                            <div class="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center text-3xl mb-3 shadow-inner">
+                                <i class="fa-solid fa-palette"></i>
+                            </div>
+                            <h2 class="text-2xl font-bold">ក្លឹបសិល្បៈសាលារៀន</h2>
+                            <p class="text-indigo-100 text-sm mt-1">ប្រព័ន្ធគ្រប់គ្រង និងស្នើសុំច្បាប់អវត្តមាន</p>
+                        </div>
+                        
+                        <div class="p-8">
+                            <form onsubmit="handleLogin(event)" class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">ឈ្មោះគណនី (Username)</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400"><i class="fa-solid fa-user"></i></span>
+                                        <input type="text" id="username" required placeholder="ឧ. teacher, leader, Vice1 ឬ student" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">ពាក្យសម្ងាត់ (Password)</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400"><i class="fa-solid fa-lock"></i></span>
+                                        <input type="password" id="password" required placeholder="••••••" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 transition-all flex items-center justify-center gap-2">
+                                    <span>ចូលគណនី</span>
+                                    <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                                </button>
+                            </form>
+
+                            <!-- Quick Login Helpers for testing -->
+                            <div class="mt-6 pt-6 border-t border-slate-100">
+                                <p class="text-xs text-slate-400 text-center mb-3">គណនីសាកល្បងរហ័ស (ចុចដើម្បីចូល):</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="quickLogin('teacher', '123')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg text-left transition flex items-center justify-between">
+                                        <span>គ្រូ (teacher)</span>
+                                        <i class="fa-solid fa-chalkboard-user"></i>
+                                    </button>
+                                    <button onclick="quickLogin('leader', '123')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg text-left transition flex items-center justify-between">
+                                        <span>ប្រធាន (leader)</span>
+                                        <i class="fa-solid fa-user-tie"></i>
+                                    </button>
+                                    <button onclick="quickLogin('Vice1', '123')" class="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg text-left transition flex items-center justify-between">
+                                        <span>អនុប្រធាន (Vice)</span>
+                                        <i class="fa-solid fa-user-shield"></i>
+                                    </button>
+                                    <button onclick="quickLogin('student', '123')" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg text-left transition flex items-center justify-between">
+                                        <span>សិស្ស (student)</span>
+                                        <i class="fa-solid fa-user-graduate"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value.trim();
+            
+            const found = usersDB.find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p);
+            if (found) {
+                currentUser = found;
+                localStorage.setItem('art_club_current_user', JSON.stringify(currentUser));
+                showNotification('ជោគជ័យ', `ស្វាគមន៍ការចូលកាន់ប្រព័ន្ធ ${currentUser.name}`, 'success');
+                render();
+            } else {
+                showNotification('បរាជ័យ', 'ឈ្មោះគណនី ឬ ពាក្យសម្ងាត់មិនត្រឹមត្រូវ!', 'alert');
+            }
+        }
+
+        function quickLogin(u, p) {
+            const found = usersDB.find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p);
+            if (found) {
+                currentUser = found;
+                localStorage.setItem('art_club_current_user', JSON.stringify(currentUser));
+                showNotification('ជោគជ័យ', `ស្វាគមន៍ ${currentUser.name} (${currentUser.title})`, 'success');
+                render();
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('art_club_current_user');
+            showNotification('ចាកចេញ', 'បានចាកចេញពីប្រព័ន្ធដោយជោគជ័យ', 'info');
+            render();
+        }
+
+        function renderStudentDashboard() {
+            const myLeaves = leaves.filter(l => l.studentName.includes(currentUser.name.replace(' (សិស្ស)', '')) || true); // For demo show all or filter
+            return `
+                <!-- Navbar -->
+                <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center text-white justify-center text-lg shadow-md shadow-indigo-500/20">
+                            <i class="fa-solid fa-palette"></i>
+                        </div>
+                        <div>
+                            <h1 class="font-bold text-slate-800 text-base">ក្លឹបសិល្បៈ - បន្ទប់សិស្ស</h1>
+                            <p class="text-xs text-slate-500">អ្នកប្រើប្រាស់៖ <span class="font-semibold text-indigo-600">${currentUser.name}</span></p>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="px-4 py-2 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-sm font-medium rounded-xl transition flex items-center gap-2">
+                        <span>ចាកចេញ</span>
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </nav>
+
+                <!-- Content Body -->
+                <div class="max-w-4xl mx-auto w-full p-6 grid grid-cols-1 md:grid-cols-3 gap-6 flex-grow">
+                    <!-- Form Submission -->
+                    <div class="md:col-span-1 bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-fit">
+                        <h2 class="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-file-pen text-indigo-600"></i>
+                            <span>ដាក់ពាក្យសុំច្បាប់</span>
+                        </h2>
+                        <form onsubmit="submitLeaveRequest(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">ឈ្មោះពេញរបស់អ្នក</label>
+                                <input type="text" id="leave_name" required value="${currentUser.name.replace(' (សិស្ស)', '')}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">ថ្នាក់រៀន</label>
+                                <input type="text" id="leave_class" required placeholder="ឧ. ថ្នាក់ទី ១២ ក" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">ចាប់ពីថ្ងៃ</label>
+                                    <input type="date" id="leave_start" required class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">ដល់ថ្ងៃ</label>
+                                    <input type="date" id="leave_end" required class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">មូលហេតុសុំច្បាប់</label>
+                                <textarea id="leave_reason" required rows="3" placeholder="សូមបញ្ជាក់មូលហេតុច្បាស់លាស់..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span>បញ្ជូនពាក្យសុំច្បាប់</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- History List -->
+                    <div class="md:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col">
+                        <h2 class="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+                            <span>ប្រវត្តិពាក្យសុំច្បាប់របស់អ្នក</span>
+                        </h2>
+                        <div class="space-y-3 overflow-y-auto max-h-[500px] pr-1 flex-grow">
+                            ${leaves.length === 0 ? '<p class="text-slate-400 text-sm text-center py-10">មិនទាន់មានពាក្យសុំច្បាប់នៅឡើយទេ។</p>' : 
+                                leaves.map(l => {
+                                    let badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                                    let statusText = 'កំពុងរង់ចាំពិនិត្យ';
+                                    if(l.status === 'APPROVED') { badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'; statusText = 'បានអនុម័ត'; }
+                                    if(l.status === 'REJECTED') { badgeColor = 'bg-rose-50 text-rose-700 border-rose-200'; statusText = 'បានបដិសេធ'; }
+                                    
+                                    return `
+                                        <div class="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col gap-2">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <h3 class="font-bold text-slate-800 text-sm">${l.studentName} <span class="text-xs font-normal text-slate-500">(${l.studentClass})</span></h3>
+                                                    <p class="text-xs text-slate-500 mt-0.5"><i class="fa-regular fa-calendar"></i> ${l.startDate} ដល់ ${l.endDate}</p>
+                                                </div>
+                                                <span class="px-2.5 py-1 rounded-full text-xs font-medium border ${badgeColor}">${statusText}</span>
+                                            </div>
+                                            <p class="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100"><span class="font-semibold text-slate-700">មូលហេតុ៖</span> ${l.reason}</p>
+                                        </div>
+                                    `;
+                                }).join('')
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function submitLeaveRequest(e) {
+            e.preventDefault();
+            const newLeave = {
+                id: Date.now(),
+                studentName: document.getElementById('leave_name').value.trim(),
+                studentClass: document.getElementById('leave_class').value.trim(),
+                reason: document.getElementById('leave_reason').value.trim(),
+                startDate: document.getElementById('leave_start').value,
+                endDate: document.getElementById('leave_end').value,
+                status: 'PENDING',
+                createdAt: new Date().toISOString()
+            };
+
+            leaves.unshift(newLeave);
+            localStorage.setItem('art_club_leaves', JSON.stringify(leaves));
+
+            // Trigger simulated mobile notification broadcast to teachers & leaders
+            showNotification('ពាក្យសុំច្បាប់ថ្មី!', `សិស្ស ${newName = newLeave.studentName} បានស្នើសុំច្បាប់អវត្តមាន។ សូមពិនិត្យមើល។`, 'alert');
+
+            document.getElementById('leave_reason').value = '';
+            document.getElementById('leave_start').value = '';
+            document.getElementById('leave_end').value = '';
+            
+            showNotification('ជោគជ័យ', 'ពាក្យសុំច្បាប់របស់អ្នកត្រូវបានបញ្ជូនជូនគ្រូ និងថ្នាក់ដឹកនាំក្លឹបហើយ!', 'success');
+            render();
+        }
+
+        function renderAdminDashboard() {
+            const pendingLeaves = leaves.filter(l => l.status === 'PENDING');
+            return `
+                <!-- Navbar -->
+                <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center text-white justify-center text-lg shadow-md shadow-indigo-500/20">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div>
+                            <h1 class="font-bold text-slate-800 text-base">ផ្ទាំងគ្រប់គ្រងក្លឹបសិល្បៈ</h1>
+                            <p class="text-xs text-slate-500">${currentUser.title}៖ <span class="font-semibold text-indigo-600">${currentUser.name}</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="relative bg-slate-100 px-3 py-1.5 rounded-xl flex items-center gap-2">
+                            <i class="fa-solid fa-bell text-slate-600"></i>
+                            <span class="text-xs font-bold text-indigo-600">${pendingLeaves.length} ពាក្យសុំច្បាប់ថ្មី</span>
+                        </div>
+                        <button onclick="logout()" class="px-4 py-2 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-sm font-medium rounded-xl transition flex items-center gap-2">
+                            <span>ចាកចេញ</span>
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </nav>
+
+                <!-- Admin Body -->
+                <div class="max-w-6xl mx-auto w-full p-6 flex-grow flex flex-col gap-6">
+                    <!-- Stats summary -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+                                <i class="fa-solid fa-clock"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-400 font-medium">រង់ចាំពិនិត្យ</p>
+                                <h3 class="text-2xl font-bold text-slate-800">${pendingLeaves.length}</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                                <i class="fa-solid fa-circle-check"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-400 font-medium">បានអនុម័ត</p>
+                                <h3 class="text-2xl font-bold text-slate-800">${leaves.filter(l => l.status === 'APPROVED').length}</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl font-bold">
+                                <i class="fa-solid fa-circle-xmark"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-400 font-medium">បានបដិសេធ</p>
+                                <h3 class="text-2xl font-bold text-slate-800">${leaves.filter(l => l.status === 'REJECTED').length}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Leave Requests Table / Cards -->
+                    <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-indigo-600"></i>
+                                <span>បញ្ជីពាក្យសុំច្បាប់របស់សមាជិកក្លឹប</span>
+                            </h2>
+                        </div>
+
+                        <div class="space-y-4">
+                            ${leaves.length === 0 ? '<p class="text-slate-400 text-sm text-center py-10">មិនទាន់មានពាក្យសុំច្បាប់ណាមួយឡើយ។</p>' : 
+                                leaves.map(l => {
+                                    let badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                                    let statusText = 'កំពុងរង់ចាំ';
+                                    if(l.status === 'APPROVED') { badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'; statusText = 'បានអនុម័ត'; }
+                                    if(l.status === 'REJECTED') { badgeColor = 'bg-rose-50 text-rose-700 border-rose-200'; statusText = 'បានបដិសេធ'; }
+
+                                    return `
+                                        <div class="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:bg-slate-50">
+                                            <div class="space-y-1">
+                                                <div class="flex items-center gap-3">
+                                                    <h3 class="font-bold text-slate-800 text-base">${l.studentName}</h3>
+                                                    <span class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md font-medium">${l.studentClass}</span>
+                                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeColor}">${statusText}</span>
+                                                </div>
+                                                <p class="text-xs text-slate-500"><i class="fa-regular fa-calendar-days"></i> កាលបរិច្ឆេទសុំច្បាប់៖ <span class="font-semibold text-slate-700">${l.startDate} ដល់ ${l.endDate}</span></p>
+                                                <p class="text-xs text-slate-600 mt-1"><span class="font-semibold text-slate-700">មូលហេតុ៖</span> ${l.reason}</p>
+                                            </div>
+                                            
+                                            <div class="flex items-center gap-2 self-end md:self-center">
+                                                ${l.status === 'PENDING' ? `
+                                                    <button onclick="updateStatus(${l.id}, 'APPROVED')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5">
+                                                        <i class="fa-solid fa-check"></i>
+                                                        <span>អនុម័ត</span>
+                                                    </button>
+                                                    <button onclick="updateStatus(${l.id}, 'REJECTED')" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-rose-500/20 transition flex items-center gap-1.5">
+                                                        <i class="fa-solid fa-xmark"></i>
+                                                        <span>បដិសេធ</span>
+                                                    </button>
+                                                ` : `
+                                                    <button onclick="updateStatus(${l.id}, 'PENDING')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium rounded-xl transition">
+                                                        ប្តូរជាដកហូតវិញ
+                                                    </button>
+                                                `}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateStatus(id, newStatus) {
+            const leave = leaves.find(l => l.id === id);
+            if (leave) {
+                leave.status = newStatus;
+                localStorage.setItem('art_club_leaves', JSON.stringify(leaves));
+                const txt = newStatus === 'APPROVED' ? 'អនុម័ត' : newStatus === 'REJECTED' ? 'បដិសេធ' : 'រង់ចាំពិនិត្យ';
+                showNotification('កែប្រែស្ថានភាព', `បានប្តូរស្ថានភាពពាក្យសុំច្បាប់របស់ ${leave.studentName} ទៅជា "${txt}"`, 'success');
+                render();
+            }
+        }
+
+        // Initial render on load
+        window.onload = function() {
+            render();
+        };
+    </script>
+</body>
+</html>
